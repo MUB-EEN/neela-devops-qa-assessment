@@ -1,49 +1,56 @@
-.PHONY: docs test agent-setup agent-resetdb agent-smoke agent-test
+.PHONY: help install test unit-test ui-test lint security qa clean
 
-VENV_PYTHON=env/bin/python
-AGENT_TEST_FILES=$(shell git ls-files 'tests/*.py')
+PYTHON ?= python
+PIP ?= $(PYTHON) -m pip
+PYTEST ?= $(PYTHON) -m pytest
 
 help:
-	@echo "  env         create a development environment using virtualenv"
-	@echo "  deps        install dependencies using pip"
-	@echo "  clean       remove unwanted files like .pyc's"
-	@echo "  lint        check style with flake8"
-	@echo "  test        run all your tests using py.test"
-	@echo "  agent-setup install dependencies in ./env for AI/code agents"
-	@echo "  agent-resetdb reset and seed local development database"
-	@echo "  agent-smoke run fast smoke tests"
-	@echo "  agent-test  run full test suite with coverage"
+	@echo "MyTemplate QA Pipeline"
+	@echo ""
+	@echo "  install     Install project and QA dependencies"
+	@echo "  test        Run the complete test suite"
+	@echo "  unit-test   Run backend tests with JUnit and coverage reports"
+	@echo "  ui-test     Run Playwright UI tests with failure artifacts"
+	@echo "  lint        Run Ruff static analysis"
+	@echo "  security    Run Bandit security scan"
+	@echo "  qa          Run lint, security, unit tests and UI tests"
+	@echo "  clean       Remove generated QA artifacts and Python cache files"
 
-env:
-	python3 -m venv env && \
-	. env/bin/activate && \
-	make deps
-
-deps:
-	pip install -r requirements.txt
-
-clean:
-	find . | grep -E "(__pycache__|\.pyc|\.DS_Store|\.db|\.pyo$\)" | xargs rm -rf
-
-lint:
-	flake8 --exclude=env .
+install:
+	$(PIP) install -r requirements.txt
+	$(PYTHON) -m playwright install chromium
 
 test:
-	py.test tests
+	APPNAME_ENV=test $(PYTEST) -q tests
 
-agent-setup:
-	python3 -m venv env
-	$(VENV_PYTHON) -m pip install --upgrade pip
-	$(VENV_PYTHON) -m pip install -r requirements.txt
+unit-test:
+	mkdir -p artifacts/unit artifacts/coverage
+	APPNAME_ENV=test $(PYTEST) -q tests/test_*.py \
+		--junitxml=artifacts/unit/junit.xml \
+		--cov=appname \
+		--cov-report=term-missing \
+		--cov-report=xml:artifacts/coverage/coverage.xml \
+		--cov-report=html:artifacts/coverage/html
 
-agent-resetdb:
-	@if [ ! -x "$(VENV_PYTHON)" ]; then echo "Run 'make agent-setup' first."; exit 1; fi
-	APPNAME_ENV=dev $(VENV_PYTHON) manage.py resetdb
+ui-test:
+	mkdir -p artifacts/playwright
+	APPNAME_ENV=test $(PYTEST) -q tests/ui \
+		--tracing=retain-on-failure \
+		--screenshot=only-on-failure \
+		--video=retain-on-failure \
+		--output=artifacts/playwright
 
-agent-smoke:
-	@if [ ! -x "$(VENV_PYTHON)" ]; then echo "Run 'make agent-setup' first."; exit 1; fi
-	APPNAME_ENV=test $(VENV_PYTHON) -m pytest -q tests/test_urls.py tests/test_login.py
+lint:
+	mkdir -p artifacts/lint
+	$(PYTHON) -m ruff check appname/services/branding.py tests/test_branding.py tests/ui --output-format=json > artifacts/lint/ruff.json
 
-agent-test:
-	@if [ ! -x "$(VENV_PYTHON)" ]; then echo "Run 'make agent-setup' first."; exit 1; fi
-	APPNAME_ENV=test $(VENV_PYTHON) -m pytest --cov-report=term-missing --cov=appname $(AGENT_TEST_FILES)
+security:
+	mkdir -p artifacts/security
+	$(PYTHON) -m bandit -r appname -f json -o artifacts/security/bandit.json
+
+qa: lint security unit-test ui-test
+
+clean:
+	rm -rf artifacts
+	find . -type d -name "__pycache__" -prune -exec rm -rf {} +
+	find . -type f -name "*.pyc" -delete

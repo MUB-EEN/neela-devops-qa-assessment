@@ -1,4 +1,3 @@
-import os
 class Branding:
     def __init__(self):
         self.environment = "prod"
@@ -11,8 +10,8 @@ class Branding:
     @property
     def name(self):
         if self.environment == "dev":
-            return "appname-dev"
-        return "appname"
+            return "MyTemplate-dev"
+        return "MyTemplate"
 
     @property
     def support_email(self):
@@ -29,11 +28,11 @@ class Branding:
 
     @property
     def website_domain(self):
-        return "appname.com"
+        return "mytemplate.local"
 
     @property
     def legal_name(self):
-        return "appname.com"
+        return "mytemplate.local"
 
     @property
     def corporate_jurisdiction(self):
